@@ -1,15 +1,7 @@
-import React from 'react';
-
-interface Row {
-    id: string;
-    [key: string]: string;
-}
-
-interface Header {
-    attributeName: string;
-    displayText: string;
-}
-
+import React from "react";
+import "./table.css";
+import { Row } from "./interfaces/Row";
+import { Header } from "./interfaces/Header";
 interface TableProps {
     headers: Header[];
     rows: Row[];
@@ -21,5 +13,4 @@ declare const TableComponent: {
         rows: never[];
     };
 };
-
-export { TableComponent as Table };
+export default TableComponent;

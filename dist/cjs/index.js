@@ -2828,12 +2828,146 @@ function styleInject(css, ref) {
   }
 }
 
-var css_248z = ".btn {\r\n  background-color: blueviolet;\r\n}\r\n";
+var css_248z = ".table {\r\n  width: 100%;\r\n  border-collapse: collapse;\r\n}\r\n\r\nth,\r\ntd {\r\n  padding: 12px;\r\n  text-align: left;\r\n  border-bottom: 1px solid #ddd;\r\n}\r\n\r\nth {\r\n  background-color: #f2f2f2;\r\n}\r\n\r\ntr:hover {\r\n  background-color: #f5f5f5;\r\n}\r\n\r\ntd.selected {\r\n  border: 2px solid black;\r\n}\r\n";
 styleInject(css_248z);
 
-const Button = ({ label }) => {
-    // btn class added 👇👇
-    return React.createElement("button", { className: "btn" }, label);
+const getCell = (tableRef, rowId, columnId) => {
+    var _a;
+    return (_a = tableRef.current) === null || _a === void 0 ? void 0 : _a.querySelector(`tr[row-id="${rowId}"] td[column-id="${columnId}"]`);
 };
 
-exports.Button = Button;
+var MovementKey;
+(function (MovementKey) {
+    MovementKey["ArrowDown"] = "ArrowDown";
+    MovementKey["ArrowUp"] = "ArrowUp";
+    MovementKey["ArrowLeft"] = "ArrowLeft";
+    MovementKey["ArrowRight"] = "ArrowRight";
+})(MovementKey || (MovementKey = {}));
+const isMovementKey = (keyEvent) => {
+    return Object.values(MovementKey).includes(keyEvent);
+};
+const useTableSelection = (rows, headers, tableRef) => {
+    const [selectedCell, setSelectedCell] = reactExports.useState({
+        trId: null,
+        columnId: null,
+    });
+    const getNextIndex = reactExports.useCallback((currentRowIndex, eventKey, rowCount, currentColumnId, headers) => {
+        const columnIndex = headers.findIndex((x) => x.attributeName === currentColumnId);
+        const columnLength = headers.length;
+        let newColumnIndex;
+        let nextRowIndex;
+        if (eventKey === MovementKey.ArrowUp) {
+            nextRowIndex = (currentRowIndex - 1 + rowCount) % rowCount;
+            window.scrollBy(0, -50);
+        }
+        else if (eventKey === MovementKey.ArrowDown) {
+            nextRowIndex = (currentRowIndex + 1) % rowCount;
+            window.scrollBy(0, 50);
+        }
+        else if (eventKey === MovementKey.ArrowLeft) {
+            newColumnIndex = (columnIndex - 1 + columnLength) % columnLength;
+        }
+        else if (eventKey === MovementKey.ArrowRight) {
+            newColumnIndex = (columnIndex + 1) % columnLength;
+        }
+        const columnIdFinal = newColumnIndex !== undefined
+            ? headers[newColumnIndex].attributeName
+            : currentColumnId;
+        const finalIndex = nextRowIndex !== undefined ? nextRowIndex : currentRowIndex;
+        return { nextRowIndex: finalIndex, columnId: columnIdFinal };
+    }, [headers]);
+    const handleKey = reactExports.useCallback((event) => {
+        if (isMovementKey(event.key) && selectedCell.trId !== null) {
+            event.preventDefault();
+            const rowIndex = rows.findIndex((expense) => expense.id === selectedCell.trId);
+            const { nextRowIndex, columnId } = getNextIndex(rowIndex, event.key, rows.length, selectedCell.columnId, headers);
+            const nextExpense = rows[nextRowIndex];
+            const nextCell = getCell(tableRef, nextExpense.id, columnId);
+            if (nextCell) {
+                nextCell.focus();
+                setSelectedCell({ trId: nextExpense.id, columnId });
+            }
+        }
+    }, [rows, selectedCell]);
+    reactExports.useEffect(() => {
+        document.addEventListener("keydown", handleKey);
+        return () => {
+            document.removeEventListener("keydown", handleKey);
+        };
+    }, [handleKey]);
+    const handleBodyTrClick = reactExports.useCallback((event) => {
+        const trId = event.currentTarget.getAttribute("row-id");
+        const columnId = event.target.getAttribute("column-id");
+        setSelectedCell({ columnId, trId });
+    }, []);
+    return [selectedCell, handleKey, handleBodyTrClick];
+};
+
+const Cell = ({ value, isSelected, columnName }) => (React.createElement("td", { className: isSelected ? "selected" : "", "column-id": columnName }, value));
+const TableComponent = ({ rows, headers }) => {
+    // State para manejar el contenido editado de la celda
+    const [editedCellValues, setEditedCellValues] = reactExports.useState({});
+    const tableRef = reactExports.useRef(null);
+    const [selectedCell, handleKey, handleBodyTrClick] = useTableSelection(rows, headers, tableRef);
+    const isSelectedCell = reactExports.useCallback((cellId, expenseId) => {
+        return (selectedCell.trId === expenseId && selectedCell.columnId === cellId);
+    }, [selectedCell]);
+    const renderRow = reactExports.useCallback((row) => {
+        return (React.createElement("tr", { key: row.id, "row-id": row.id, onClick: handleBodyTrClick, className: isSelectedCell("", row.id) ? "selected" : "" }, headers.map((data) => {
+            let cellValue = row[data.attributeName];
+            if (editedCellValues[row.id]) {
+                cellValue = editedCellValues[row.id][data.attributeName];
+            }
+            return (React.createElement(Cell, { key: data.attributeName, value: cellValue, columnName: data.attributeName, isSelected: isSelectedCell(data.attributeName, row.id) }));
+        })));
+    }, [headers, isSelectedCell, handleBodyTrClick]);
+    const isWritableCharacter = (key) => {
+        // Comprueba si la key es una letra (mayúscula o minúscula), un símbolo o un número
+        const letrasSimbolosYnumeros = /^[A-Za-z0-9!"#$%&'()*+,-./:;<=>?@[\\\]^_`{|}~]$/;
+        return letrasSimbolosYnumeros.test(key);
+    };
+    //Handle edit
+    reactExports.useEffect(() => {
+        function pressKey({ key }) {
+            if (isWritableCharacter(key) &&
+                selectedCell.trId &&
+                selectedCell.columnId) {
+                setEditedCellValues((lastCellValues) => {
+                    // Copia inmutable del objeto de valores editados
+                    const newCellValues = Object.assign({}, lastCellValues);
+                    // Obtiene la fila actual
+                    const currentRow = rows.find((x) => x.id === selectedCell.trId);
+                    // Si la celda está en la lista de filas modificadas, toma el valor de allí
+                    if (newCellValues.hasOwnProperty(selectedCell.trId)) {
+                        let currentValue = newCellValues[selectedCell.trId][selectedCell.columnId];
+                        const newRowValue = currentValue + key;
+                        newCellValues[selectedCell.trId][selectedCell.columnId] =
+                            newRowValue;
+                    }
+                    else {
+                        let currentValue = currentRow[selectedCell.columnId];
+                        const newRowValue = currentValue + key;
+                        newCellValues[selectedCell.trId] = Object.assign({}, currentRow);
+                        newCellValues[selectedCell.trId][selectedCell.columnId] =
+                            newRowValue;
+                    }
+                    return newCellValues;
+                });
+            }
+        }
+        window.addEventListener("keydown", pressKey);
+        return () => {
+            window.removeEventListener("keydown", pressKey);
+        };
+    }, [selectedCell, editedCellValues, rows]);
+    return (React.createElement("table", { ref: tableRef },
+        React.createElement("thead", null,
+            React.createElement("tr", null, headers.map((x) => (React.createElement("th", { key: x.attributeName }, x.displayText))))),
+        React.createElement("tbody", null, rows.map(renderRow))));
+};
+TableComponent.defaultProps = {
+    headers: [],
+    rows: [],
+};
+
+exports.Table = TableComponent;
